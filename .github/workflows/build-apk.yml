@@ -30,6 +30,8 @@ jobs:
           mkdir -p app/src/main/res/values
 
           cat > settings.gradle.kts <<'EOF'
+          import org.gradle.api.initialization.resolve.RepositoriesMode
+
           pluginManagement {
               repositories {
                   google()
@@ -80,6 +82,15 @@ jobs:
                   versionCode = 1
                   versionName = "1.0"
               }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
 
           dependencies {
@@ -90,6 +101,7 @@ jobs:
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <uses-permission android:name="android.permission.INTERNET" />
@@ -118,14 +130,18 @@ jobs:
 
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <resources>
 
-              <style name="AppTheme"
+              <style
+                  name="AppTheme"
                   parent="Theme.AppCompat.Light.NoActionBar">
+
                   <item name="android:fontFamily">sans</item>
                   <item name="android:colorAccent">#1976D2</item>
                   <item name="android:navigationBarColor">#000000</item>
                   <item name="android:statusBarColor">#000000</item>
+
               </style>
 
           </resources>
@@ -141,7 +157,6 @@ jobs:
           import android.os.Looper
           import android.view.Gravity
           import android.view.MotionEvent
-          import android.view.View
           import android.webkit.WebChromeClient
           import android.webkit.WebView
           import android.webkit.WebViewClient
@@ -157,22 +172,33 @@ jobs:
               private lateinit var statusText: TextView
 
               private val handler = Handler(Looper.getMainLooper())
+
               private var autoRefresh = false
 
               private val refreshRunnable = object : Runnable {
+
                   override fun run() {
+
                       if (autoRefresh) {
+
                           webView.reload()
-                          handler.postDelayed(this, 30000)
+
+                          handler.postDelayed(
+                              this,
+                              30000
+                          )
                       }
                   }
               }
 
               @SuppressLint("SetJavaScriptEnabled")
-              override fun onCreate(savedInstanceState: Bundle?) {
+              override fun onCreate(
+                  savedInstanceState: Bundle?
+              ) {
                   super.onCreate(savedInstanceState)
 
                   val root = LinearLayout(this)
+
                   root.orientation = LinearLayout.VERTICAL
                   root.setBackgroundColor(Color.WHITE)
 
@@ -186,28 +212,37 @@ jobs:
                   webView.settings.javaScriptCanOpenWindowsAutomatically = true
                   webView.settings.setSupportMultipleWindows(true)
 
-                  webView.webViewClient = object : WebViewClient() {
-                      override fun onPageFinished(view: WebView?, url: String?) {
-                          statusText.text = "✓ Page loaded"
+                  webView.webViewClient =
+                      object : WebViewClient() {
+
+                          override fun onPageFinished(
+                              view: WebView?,
+                              url: String?
+                          ) {
+                              statusText.text = "✓ Page loaded"
+                          }
+
+                          override fun onReceivedError(
+                              view: WebView?,
+                              errorCode: Int,
+                              description: String?,
+                              failingUrl: String?
+                          ) {
+                              statusText.text = "⚠ Loading error"
+                          }
                       }
 
-                      override fun onReceivedError(
-                          view: WebView?,
-                          errorCode: Int,
-                          description: String?,
-                          failingUrl: String?
-                      ) {
-                          statusText.text = "⚠ Loading error"
-                      }
-                  }
-
-                  webView.webChromeClient = WebChromeClient()
+                  webView.webChromeClient =
+                      WebChromeClient()
 
                   webView.setOnTouchListener { _, event ->
+
                       if (event.action == MotionEvent.ACTION_UP) {
+
                           statusText.text =
                               "Touch: ${event.x.toInt()}, ${event.y.toInt()}"
                       }
+
                       false
                   }
 
@@ -221,37 +256,67 @@ jobs:
                   )
 
                   val controls = LinearLayout(this)
-                  controls.orientation = LinearLayout.HORIZONTAL
-                  controls.gravity = Gravity.CENTER
-                  controls.setBackgroundColor(Color.DKGRAY)
 
-                  val reloadButton = Button(this)
+                  controls.orientation =
+                      LinearLayout.HORIZONTAL
+
+                  controls.gravity =
+                      Gravity.CENTER
+
+                  controls.setBackgroundColor(
+                      Color.DKGRAY
+                  )
+
+                  val reloadButton =
+                      Button(this)
+
                   reloadButton.text = "Reload"
+
                   reloadButton.setOnClickListener {
+
                       webView.reload()
                   }
 
-                  val autoButton = Button(this)
+                  val autoButton =
+                      Button(this)
+
                   autoButton.text = "Auto: OFF"
+
                   autoButton.setOnClickListener {
+
                       autoRefresh = !autoRefresh
 
                       if (autoRefresh) {
+
                           autoButton.text = "Auto: ON"
-                          handler.post(refreshRunnable)
+
+                          handler.post(
+                              refreshRunnable
+                          )
+
                           Toast.makeText(
                               this,
                               "Auto refresh: 30 seconds",
                               Toast.LENGTH_SHORT
                           ).show()
+
                       } else {
+
                           autoButton.text = "Auto: OFF"
-                          handler.removeCallbacks(refreshRunnable)
+
+                          handler.removeCallbacks(
+                              refreshRunnable
+                          )
                       }
                   }
 
-                  controls.addView(reloadButton)
-                  controls.addView(autoButton)
+                  controls.addView(
+                      reloadButton
+                  )
+
+                  controls.addView(
+                      autoButton
+                  )
 
                   root.addView(
                       controls,
@@ -262,11 +327,27 @@ jobs:
                   )
 
                   statusText = TextView(this)
-                  statusText.text = "BLS Smart Browser"
-                  statusText.setTextColor(Color.WHITE)
-                  statusText.setBackgroundColor(Color.BLACK)
-                  statusText.gravity = Gravity.CENTER
-                  statusText.setPadding(8, 8, 8, 8)
+
+                  statusText.text =
+                      "BLS Smart Browser"
+
+                  statusText.setTextColor(
+                      Color.WHITE
+                  )
+
+                  statusText.setBackgroundColor(
+                      Color.BLACK
+                  )
+
+                  statusText.gravity =
+                      Gravity.CENTER
+
+                  statusText.setPadding(
+                      8,
+                      8,
+                      8,
+                      8
+                  )
 
                   root.addView(
                       statusText,
@@ -284,16 +365,25 @@ jobs:
               }
 
               override fun onBackPressed() {
+
                   if (webView.canGoBack()) {
+
                       webView.goBack()
+
                   } else {
+
                       super.onBackPressed()
                   }
               }
 
               override fun onDestroy() {
-                  handler.removeCallbacks(refreshRunnable)
+
+                  handler.removeCallbacks(
+                      refreshRunnable
+                  )
+
                   webView.destroy()
+
                   super.onDestroy()
               }
           }
