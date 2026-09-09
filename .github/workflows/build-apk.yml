@@ -8,9 +8,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Create Android project
         shell: bash
         run: |
+
           set -e
 
           mkdir -p app/src/main/java/com/example/blssmartbrowser
@@ -18,6 +20,8 @@ jobs:
           mkdir -p app/src/main/assets
 
           cat > settings.gradle.kts <<'EOF'
+          import org.gradle.api.initialization.resolve.RepositoriesMode
+
           pluginManagement {
               repositories {
                   google()
@@ -73,20 +77,29 @@ jobs:
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="Theme.BLSSmartBrowser" parent="Theme.AppCompat.DayNight.NoActionBar">
+
+              <style
+                  name="Theme.BLSSmartBrowser"
+                  parent="Theme.AppCompat.DayNight.NoActionBar">
+
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:statusBarColor">#161b22</item>
-                  <item name="android:navigationBarColor">#0d1117</item>
+                  <item name="android:statusBarColor">#161B22</item>
+                  <item name="android:navigationBarColor">#0D1117</item>
                   <item name="android:windowLightStatusBar">false</item>
+
               </style>
+
           </resources>
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-permission android:name="android.permission.INTERNET" />
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission
+                  android:name="android.permission.INTERNET" />
 
               <application
                   android:allowBackup="false"
@@ -96,15 +109,21 @@ jobs:
 
                   <activity
                       android:name=".MainActivity"
-                      android:screenOrientation="portrait"
-                      android:exported="true">
+                      android:exported="true"
+                      android:screenOrientation="portrait">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
+
               </application>
 
           </manifest>
@@ -125,7 +144,10 @@ jobs:
           import android.webkit.WebChromeClient
           import android.webkit.WebView
           import android.webkit.WebViewClient
-          import android.widget.*
+          import android.widget.FrameLayout
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
           import androidx.appcompat.app.AppCompatActivity
 
           data class TouchPoint(
@@ -146,7 +168,8 @@ jobs:
               private lateinit var count: TextView
               private lateinit var menu: LinearLayout
 
-              private val handler = Handler(Looper.getMainLooper())
+              private val handler =
+                  Handler(Looper.getMainLooper())
 
               private val touches =
                   mutableListOf<TouchPoint>()
@@ -156,8 +179,9 @@ jobs:
               private var refreshSeconds = 30L
               private var lastTouch = 0L
 
-              private val autoRunnable =
+              private val autoRefreshTask =
                   object : Runnable {
+
                       override fun run() {
 
                           if (autoRefresh) {
@@ -199,17 +223,12 @@ jobs:
                   webView.settings.apply {
 
                       javaScriptEnabled = true
-
                       domStorageEnabled = true
-
                       databaseEnabled = true
-
                       loadsImagesAutomatically = true
 
                       javaScriptCanOpenWindowsAutomatically =
                           true
-
-                      setSupportZoom(false)
                   }
 
                   webView.webChromeClient =
@@ -239,7 +258,8 @@ jobs:
                       }
 
                   webView.setOnTouchListener {
-                          _, event ->
+
+                      _, event ->
 
                       if (
                           recording &&
@@ -251,14 +271,15 @@ jobs:
                               System.currentTimeMillis()
 
                           val delay =
-                              if (lastTouch == 0L)
+                              if (lastTouch == 0L) {
                                   0L
-                              else
+                              } else {
                                   (now - lastTouch)
                                       .coerceIn(
                                           100L,
                                           3000L
                                       )
+                              }
 
                           touches.add(
                               TouchPoint(
@@ -277,14 +298,14 @@ jobs:
                       false
                   }
 
-                  createOverlay(root)
+                  createInterface(root)
 
                   setContentView(root)
 
                   webView.loadUrl(BLS_URL)
               }
 
-              private fun createOverlay(
+              private fun createInterface(
                   root: FrameLayout
               ) {
 
@@ -306,56 +327,13 @@ jobs:
                   )
 
                   val title =
-                      TextView(this)
-
-                  title.text =
-                      "BLS Browser"
-
-                  title.textSize =
-                      11f
-
-                  title.setTextColor(
-                      Color.LTGRAY
-                  )
-
-                  title.gravity =
-                      Gravity.CENTER
+                      makeText("BLS Browser")
 
                   status =
-                      TextView(this)
-
-                  status.text =
-                      "جاهز"
-
-                  status.textSize =
-                      11f
-
-                  status.setTextColor(
-                      Color.rgb(
-                          88,
-                          166,
-                          255
-                      )
-                  )
-
-                  status.gravity =
-                      Gravity.CENTER
+                      makeText("جاهز")
 
                   count =
-                      TextView(this)
-
-                  count.text =
-                      "Touches: 0"
-
-                  count.textSize =
-                      11f
-
-                  count.setTextColor(
-                      Color.LTGRAY
-                  )
-
-                  count.gravity =
-                      Gravity.CENTER
+                      makeText("Touches: 0")
 
                   bottom.addView(
                       title,
@@ -410,105 +388,40 @@ jobs:
                   menu.visibility =
                       View.GONE
 
-                  val box =
+                  val container =
                       FrameLayout(this)
 
-                  val boxParams =
+                  val containerParams =
                       FrameLayout.LayoutParams(
-                          70,
+                          75,
                           390
                       )
 
-                  boxParams.gravity =
+                  containerParams.gravity =
                       Gravity.END or
                       Gravity.BOTTOM
 
-                  boxParams.setMargins(
+                  containerParams.setMargins(
                       0,
                       0,
                       12,
-                      62
+                      65
                   )
 
                   root.addView(
-                      box,
-                      boxParams
+                      container,
+                      containerParams
                   )
 
-                  box.addView(
+                  container.addView(
                       menu,
                       FrameLayout.LayoutParams(
                           60,
                           -2,
-                          Gravity.BOTTOM or
+                          Gravity.TOP or
                           Gravity.CENTER_HORIZONTAL
                       )
                   )
-
-                  fun addButton(
-                      text: String,
-                      action: () -> Unit
-                  ) {
-
-                      val button =
-                          TextView(this)
-
-                      button.text =
-                          text
-
-                      button.textSize =
-                          19f
-
-                      button.gravity =
-                          Gravity.CENTER
-
-                      button.setTextColor(
-                          Color.WHITE
-                      )
-
-                      button.background =
-                          GradientDrawable().apply {
-
-                              shape =
-                                  GradientDrawable.OVAL
-
-                              setColor(
-                                  Color.rgb(
-                                      33,
-                                      38,
-                                      45
-                                  )
-                              )
-                          }
-
-                      button.elevation =
-                          8f
-
-                      button.setOnClickListener {
-                          action()
-                      }
-
-                      val params =
-                          LinearLayout.LayoutParams(
-                              48,
-                              48
-                          )
-
-                      params.gravity =
-                          Gravity.CENTER_HORIZONTAL
-
-                      params.setMargins(
-                          0,
-                          0,
-                          0,
-                          8
-                      )
-
-                      menu.addView(
-                          button,
-                          params
-                      )
-                  }
 
                   addButton("↻") {
                       webView.reload()
@@ -537,23 +450,17 @@ jobs:
                       toggleAutoRefresh()
                   }
 
-                  val main =
-                      TextView(this)
+                  val mainButton =
+                      makeText("☰")
 
-                  main.text =
-                      "☰"
-
-                  main.textSize =
+                  mainButton.textSize =
                       24f
 
-                  main.gravity =
-                      Gravity.CENTER
-
-                  main.setTextColor(
+                  mainButton.setTextColor(
                       Color.WHITE
                   )
 
-                  main.background =
+                  mainButton.background =
                       GradientDrawable().apply {
 
                           shape =
@@ -568,19 +475,17 @@ jobs:
                           )
                       }
 
-                  main.elevation =
-                      10f
-
-                  main.setOnClickListener {
+                  mainButton.setOnClickListener {
 
                       menu.visibility =
                           if (
                               menu.visibility ==
                               View.VISIBLE
-                          )
+                          ) {
                               View.GONE
-                          else
+                          } else {
                               View.VISIBLE
+                          }
                   }
 
                   val mainParams =
@@ -593,9 +498,78 @@ jobs:
                       Gravity.BOTTOM or
                       Gravity.CENTER_HORIZONTAL
 
-                  box.addView(
-                      main,
+                  container.addView(
+                      mainButton,
                       mainParams
+                  )
+              }
+
+              private fun makeText(
+                  textValue: String
+              ): TextView {
+
+                  return TextView(this).apply {
+
+                      text = textValue
+                      textSize = 12f
+                      gravity = Gravity.CENTER
+                      setTextColor(Color.LTGRAY)
+                  }
+              }
+
+              private fun addButton(
+                  textValue: String,
+                  action: () -> Unit
+              ) {
+
+                  val button =
+                      makeText(textValue)
+
+                  button.textSize =
+                      20f
+
+                  button.setTextColor(
+                      Color.WHITE
+                  )
+
+                  button.background =
+                      GradientDrawable().apply {
+
+                          shape =
+                              GradientDrawable.OVAL
+
+                          setColor(
+                              Color.rgb(
+                                  33,
+                                  38,
+                                  45
+                              )
+                          )
+                      }
+
+                  button.setOnClickListener {
+                      action()
+                  }
+
+                  val params =
+                      LinearLayout.LayoutParams(
+                          48,
+                          48
+                      )
+
+                  params.gravity =
+                      Gravity.CENTER_HORIZONTAL
+
+                  params.setMargins(
+                      0,
+                      0,
+                      0,
+                      8
+                  )
+
+                  menu.addView(
+                      button,
+                      params
                   )
               }
 
@@ -723,9 +697,7 @@ jobs:
 
                   handler.postDelayed({
 
-                      root.removeView(
-                          marker
-                      )
+                      root.removeView(marker)
 
                   }, 450)
               }
@@ -738,7 +710,7 @@ jobs:
                           false
 
                       handler.removeCallbacks(
-                          autoRunnable
+                          autoRefreshTask
                       )
 
                       status.text =
@@ -750,14 +722,14 @@ jobs:
                           true
 
                       status.text =
-                          "Auto: ${refreshSeconds}s"
+                          "Auto: 30s"
 
                       handler.removeCallbacks(
-                          autoRunnable
+                          autoRefreshTask
                       )
 
                       handler.postDelayed(
-                          autoRunnable,
+                          autoRefreshTask,
                           refreshSeconds * 1000L
                       )
                   }
@@ -790,31 +762,22 @@ jobs:
           }
           EOF
 
-          cat > app/src/main/assets/index.html <<'EOF'
-          <!doctype html>
-          <html lang="ar" dir="rtl">
-          <meta charset="utf-8">
-          <title>BLS Smart Browser</title>
-          <body style="background:#0d1117;color:white;font-family:Arial;text-align:center;padding:40px">
-          <h1>BLS Smart Browser</h1>
-          <p>Android WebView interface.</p>
-          </body>
-          </html>
-          EOF
-
-      - name: Install Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v3
 
-      - name: Install Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
 
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK
+        run: |
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
 
       - name: Build APK
-        run: gradle --no-daemon :app:assembleDebug
+        run: |
+          gradle --no-daemon :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
