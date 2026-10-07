@@ -1,34 +1,104 @@
-name: Build BLS Smart Browser APK
+name: Build ApexBrowser
 
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build Release APK & AAB
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+
+      # ============================================================
+      # 1. Checkout
+      # ============================================================
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ============================================================
+      # 2. Java 17
+      # ============================================================
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+
+
+      # ============================================================
+      # 3. Android SDK
+      # ============================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+
+      - name: Accept Android licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+
       - name: Install Android SDK
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-34"
+          sdkmanager "build-tools;34.0.0"
 
-      - name: Create Android Project
+
+      # ============================================================
+      # 4. Create project structure
+      # ============================================================
+
+      - name: Create project directories
+        shell: bash
         run: |
-          mkdir -p app/src/main/java/com/bls/smartbrowser
-          mkdir -p app/src/main/res/values
+          set -e
 
+          mkdir -p app/src/main/java/com/apex/browser
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/mipmap-hdpi
+          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+
+      # ============================================================
+      # 5. gradle.properties
+      # ============================================================
+
+      - name: Create gradle.properties
+        shell: bash
+        run: |
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+
+          kotlin.code.style=official
+          EOF
+
+
+      # ============================================================
+      # 6. settings.gradle.kts
+      # ============================================================
+
+      - name: Create settings.gradle.kts
+        shell: bash
+        run: |
           cat > settings.gradle.kts <<'EOF'
           import org.gradle.api.initialization.resolve.RepositoriesMode
 
@@ -42,29 +112,41 @@ jobs:
 
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
               repositories {
                   google()
                   mavenCentral()
               }
           }
 
-          rootProject.name = "BLS_Smart_Browser"
+          rootProject.name = "ApexBrowser"
+
           include(":app")
           EOF
 
-          cat > gradle.properties <<'EOF'
-          android.useAndroidX=true
-          android.enableJetifier=true
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          EOF
 
+      # ============================================================
+      # 7. Root build.gradle.kts
+      # ============================================================
+
+      - name: Create root build.gradle.kts
+        shell: bash
+        run: |
           cat > build.gradle.kts <<'EOF'
           plugins {
-              id("com.android.application") version "8.7.3" apply false
-              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+              id("com.android.application") version "8.4.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
           }
           EOF
 
+
+      # ============================================================
+      # 8. app/build.gradle.kts
+      # ============================================================
+
+      - name: Create app/build.gradle.kts
+        shell: bash
+        run: |
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
@@ -72,15 +154,41 @@ jobs:
           }
 
           android {
-              namespace = "com.bls.smartbrowser"
-              compileSdk = 35
+              namespace = "com.apex.browser"
+
+              compileSdk = 34
 
               defaultConfig {
-                  applicationId = "com.bls.smartbrowser"
-                  minSdk = 24
-                  targetSdk = 35
+                  applicationId = "com.apex.browser"
+
+                  minSdk = 26
+                  targetSdk = 34
+
                   versionCode = 1
-                  versionName = "1.0"
+                  versionName = "1.0.0"
+
+                  testInstrumentationRunner =
+                      "androidx.test.runner.AndroidJUnitRunner"
+              }
+
+              buildTypes {
+
+                  debug {
+                      applicationIdSuffix = ".debug"
+                      versionNameSuffix = "-debug"
+                  }
+
+                  release {
+                      isMinifyEnabled = false
+                      isShrinkResources = false
+
+                      proguardFiles(
+                          getDefaultProguardFile(
+                              "proguard-android-optimize.txt"
+                          ),
+                          "proguard-rules.pro"
+                      )
+                  }
               }
 
               compileOptions {
@@ -91,34 +199,132 @@ jobs:
               kotlinOptions {
                   jvmTarget = "17"
               }
+
+              buildFeatures {
+                  compose = true
+              }
+
+              composeOptions {
+                  kotlinCompilerExtensionVersion = "1.5.14"
+              }
+
+              packaging {
+                  resources {
+                      excludes += "/META-INF/{AL2.0,LGPL2.1}"
+                      excludes += "/META-INF/DEPENDENCIES"
+                      excludes += "/META-INF/LICENSE"
+                      excludes += "/META-INF/LICENSE.txt"
+                      excludes += "/META-INF/NOTICE"
+                      excludes += "/META-INF/NOTICE.txt"
+                  }
+              }
+
+              lint {
+                  abortOnError = false
+                  checkReleaseBuilds = false
+              }
           }
 
           dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
-              implementation("androidx.appcompat:appcompat:1.7.0")
+
+              val composeBom =
+                  platform("androidx.compose:compose-bom:2024.06.00")
+
+              implementation(composeBom)
+
+              implementation("androidx.core:core-ktx:1.13.1")
+
+              implementation(
+                  "androidx.lifecycle:lifecycle-runtime-ktx:2.8.2"
+              )
+
+              implementation(
+                  "androidx.activity:activity-compose:1.9.0"
+              )
+
+              implementation("androidx.compose.ui:ui")
+
+              implementation(
+                  "androidx.compose.ui:ui-graphics"
+              )
+
+              implementation(
+                  "androidx.compose.ui:ui-tooling-preview"
+              )
+
+              implementation(
+                  "androidx.compose.material3:material3"
+              )
+
+              implementation(
+                  "androidx.compose.material:material-icons-extended"
+              )
+
+              implementation(
+                  "androidx.webkit:webkit:1.11.0"
+              )
+
+              debugImplementation(
+                  "androidx.compose.ui:ui-tooling"
+              )
           }
           EOF
 
+
+      # ============================================================
+      # 9. ProGuard
+      # ============================================================
+
+      - name: Create proguard-rules.pro
+        shell: bash
+        run: |
+          cat > app/proguard-rules.pro <<'EOF'
+          # ApexBrowser
+          # Minification is disabled for release.
+          EOF
+
+
+      # ============================================================
+      # 10. AndroidManifest.xml
+      # ============================================================
+
+      - name: Create AndroidManifest.xml
+        shell: bash
+        run: |
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
 
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission
+                  android:name="android.permission.INTERNET" />
+
+              <uses-permission
+                  android:name="android.permission.ACCESS_NETWORK_STATE" />
 
               <application
                   android:allowBackup="true"
-                  android:label="BLS Smart Browser"
-                  android:theme="@style/AppTheme"
-                  android:usesCleartextTraffic="true">
+                  android:hardwareAccelerated="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.ApexBrowser">
 
                   <activity
                       android:name=".MainActivity"
-                      android:exported="true">
+                      android:exported="true"
+                      android:screenOrientation="portrait">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
@@ -128,279 +334,1285 @@ jobs:
           </manifest>
           EOF
 
-          cat > app/src/main/res/values/styles.xml <<'EOF'
+
+      # ============================================================
+      # 11. strings.xml
+      # ============================================================
+
+      - name: Create strings.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <string name="app_name">ApexBrowser</string>
+
+          </resources>
+          EOF
+
+
+      # ============================================================
+      # 12. colors.xml
+      # ============================================================
+
+      - name: Create colors.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/colors.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <resources>
+
+              <color name="background_dark">#0F172A</color>
+              <color name="surface_dark">#1E293B</color>
+              <color name="primary_blue">#38BDF8</color>
+
+          </resources>
+          EOF
+
+
+      # ============================================================
+      # 13. themes.xml
+      # ============================================================
+
+      - name: Create themes.xml
+        shell: bash
+        run: |
+          cat > app/src/main/res/values/themes.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
 
           <resources>
 
               <style
-                  name="AppTheme"
-                  parent="Theme.AppCompat.Light.NoActionBar">
+                  name="Theme.ApexBrowser"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:colorAccent">#1976D2</item>
-                  <item name="android:navigationBarColor">#000000</item>
-                  <item name="android:statusBarColor">#000000</item>
+
+                  <item name="android:windowActionModeOverlay">true</item>
+
+                  <item name="android:windowNoTitle">true</item>
+
+                  <item name="android:colorAccent">
+                      @color/primary_blue
+                  </item>
+
+                  <item name="android:navigationBarColor">
+                      @color/background_dark
+                  </item>
+
+                  <item name="android:statusBarColor">
+                      @color/background_dark
+                  </item>
+
+                  <item name="android:windowLightStatusBar">
+                      false
+                  </item>
 
               </style>
 
           </resources>
           EOF
 
-          cat > app/src/main/java/com/bls/smartbrowser/MainActivity.kt <<'EOF'
-          package com.bls.smartbrowser
+
+      # ============================================================
+      # 14. Simple launcher icon
+      # ============================================================
+
+      - name: Create launcher icon
+        shell: bash
+        run: |
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+
+          <vector
+              xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+
+              <path
+                  android:fillColor="#38BDF8"
+                  android:pathData="M54,8A46,46 0,1 0,54 100A46,46 0,1 0,54 8" />
+
+              <path
+                  android:fillColor="#0F172A"
+                  android:pathData="M31,30L77,54L31,78Z" />
+
+          </vector>
+          EOF
+
+
+      # ============================================================
+      # 15. MainActivity.kt
+      # ============================================================
+
+      - name: Create MainActivity.kt
+        shell: bash
+        run: |
+          cat > app/src/main/java/com/apex/browser/MainActivity.kt <<'EOF'
+          package com.apex.browser
 
           import android.annotation.SuppressLint
-          import android.graphics.Color
+          import android.app.Activity
           import android.os.Bundle
-          import android.os.Handler
-          import android.os.Looper
-          import android.view.Gravity
-          import android.view.MotionEvent
+          import android.webkit.CookieManager
           import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebSettings
           import android.webkit.WebView
           import android.webkit.WebViewClient
-          import android.widget.Button
-          import android.widget.LinearLayout
-          import android.widget.TextView
           import android.widget.Toast
-          import androidx.appcompat.app.AppCompatActivity
 
-          class MainActivity : AppCompatActivity() {
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.BackHandler
+          import androidx.activity.compose.setContent
 
-              private lateinit var webView: WebView
-              private lateinit var statusText: TextView
+          import androidx.compose.foundation.background
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Box
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.Row
+          import androidx.compose.foundation.layout.Spacer
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.fillMaxWidth
+          import androidx.compose.foundation.layout.height
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.foundation.layout.size
+          import androidx.compose.foundation.layout.width
 
-              private val handler = Handler(Looper.getMainLooper())
+          import androidx.compose.foundation.shape.RoundedCornerShape
 
-              private var autoRefresh = false
+          import androidx.compose.material.icons.Icons
+          import androidx.compose.material.icons.filled.ArrowBack
+          import androidx.compose.material.icons.filled.ArrowForward
+          import androidx.compose.material.icons.filled.CleaningServices
+          import androidx.compose.material.icons.filled.Close
+          import androidx.compose.material.icons.filled.Refresh
+          import androidx.compose.material.icons.filled.Search
 
-              private val refreshRunnable = object : Runnable {
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.ButtonDefaults
+          import androidx.compose.material3.Icon
+          import androidx.compose.material3.IconButton
+          import androidx.compose.material3.LinearProgressIndicator
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.Surface
+          import androidx.compose.material3.Text
 
-                  override fun run() {
+          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.getValue
+          import androidx.compose.runtime.mutableStateOf
+          import androidx.compose.runtime.remember
+          import androidx.compose.runtime.setValue
 
-                      if (autoRefresh) {
+          import androidx.compose.ui.Alignment
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.platform.LocalContext
+          import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+          import androidx.compose.ui.text.TextStyle
+          import androidx.compose.ui.text.input.ImeAction
+          import androidx.compose.foundation.text.BasicTextField
+          import androidx.compose.foundation.text.KeyboardActions
+          import androidx.compose.foundation.text.KeyboardOptions
+          import androidx.compose.ui.unit.dp
+          import androidx.compose.ui.unit.sp
 
-                          webView.reload()
+          import androidx.compose.ui.viewinterop.AndroidView
 
-                          handler.postDelayed(
-                              this,
-                              30000
-                          )
-                      }
-                  }
-              }
+          import java.net.URLEncoder
 
-              @SuppressLint("SetJavaScriptEnabled")
-              override fun onCreate(
-                  savedInstanceState: Bundle?
-              ) {
+
+          class MainActivity : ComponentActivity() {
+
+              override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
 
-                  val root = LinearLayout(this)
-
-                  root.orientation = LinearLayout.VERTICAL
-                  root.setBackgroundColor(Color.WHITE)
-
-                  webView = WebView(this)
-
-                  webView.settings.javaScriptEnabled = true
-                  webView.settings.domStorageEnabled = true
-                  webView.settings.databaseEnabled = true
-                  webView.settings.loadsImagesAutomatically = true
-                  webView.settings.allowFileAccess = true
-                  webView.settings.javaScriptCanOpenWindowsAutomatically = true
-                  webView.settings.setSupportMultipleWindows(true)
-
-                  webView.webViewClient =
-                      object : WebViewClient() {
-
-                          override fun onPageFinished(
-                              view: WebView?,
-                              url: String?
-                          ) {
-                              statusText.text = "✓ Page loaded"
-                          }
-
-                          override fun onReceivedError(
-                              view: WebView?,
-                              errorCode: Int,
-                              description: String?,
-                              failingUrl: String?
-                          ) {
-                              statusText.text = "⚠ Loading error"
-                          }
-                      }
-
-                  webView.webChromeClient =
-                      WebChromeClient()
-
-                  webView.setOnTouchListener { _, event ->
-
-                      if (event.action == MotionEvent.ACTION_UP) {
-
-                          statusText.text =
-                              "Touch: ${event.x.toInt()}, ${event.y.toInt()}"
-                      }
-
-                      false
+                  setContent {
+                      ApexBrowserApp()
                   }
+              }
+          }
 
-                  root.addView(
-                      webView,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          0,
-                          1f
-                      )
-                  )
 
-                  val controls = LinearLayout(this)
+          @SuppressLint("SetJavaScriptEnabled")
+          @Composable
+          fun ApexBrowserApp() {
 
-                  controls.orientation =
-                      LinearLayout.HORIZONTAL
+              val context = LocalContext.current
 
-                  controls.gravity =
-                      Gravity.CENTER
+              val keyboardController =
+                  LocalSoftwareKeyboardController.current
 
-                  controls.setBackgroundColor(
-                      Color.DKGRAY
-                  )
+              val activity =
+                  context as? Activity
 
-                  val reloadButton =
-                      Button(this)
 
-                  reloadButton.text = "Reload"
+              /*
+               * الموقع الرسمي المستخدم كبداية.
+               *
+               * لا يوجد هنا:
+               * - navigator.webdriver spoofing
+               * - fake window.chrome
+               * - fake Client Hints
+               * - fake User-Agent
+               * - synthetic MotionEvent
+               * - auto clicker
+               * - auto refresh
+               */
 
-                  reloadButton.setOnClickListener {
+              val initialUrl =
+                  "https://algeria.blsspainvisa.com/"
 
-                      webView.reload()
-                  }
 
-                  val autoButton =
-                      Button(this)
-
-                  autoButton.text = "Auto: OFF"
-
-                  autoButton.setOnClickListener {
-
-                      autoRefresh = !autoRefresh
-
-                      if (autoRefresh) {
-
-                          autoButton.text = "Auto: ON"
-
-                          handler.post(
-                              refreshRunnable
-                          )
-
-                          Toast.makeText(
-                              this,
-                              "Auto refresh: 30 seconds",
-                              Toast.LENGTH_SHORT
-                          ).show()
-
-                      } else {
-
-                          autoButton.text = "Auto: OFF"
-
-                          handler.removeCallbacks(
-                              refreshRunnable
-                          )
-                      }
-                  }
-
-                  controls.addView(
-                      reloadButton
-                  )
-
-                  controls.addView(
-                      autoButton
-                  )
-
-                  root.addView(
-                      controls,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT
-                      )
-                  )
-
-                  statusText = TextView(this)
-
-                  statusText.text =
-                      "BLS Smart Browser"
-
-                  statusText.setTextColor(
-                      Color.WHITE
-                  )
-
-                  statusText.setBackgroundColor(
-                      Color.BLACK
-                  )
-
-                  statusText.gravity =
-                      Gravity.CENTER
-
-                  statusText.setPadding(
-                      8,
-                      8,
-                      8,
-                      8
-                  )
-
-                  root.addView(
-                      statusText,
-                      LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.WRAP_CONTENT
-                      )
-                  )
-
-                  setContentView(root)
-
-                  webView.loadUrl(
-                      "https://algeria.blsinternational.com/my-account"
-                  )
+              var webView by remember {
+                  mutableStateOf<WebView?>(null)
               }
 
-              override fun onBackPressed() {
+              var currentUrl by remember {
+                  mutableStateOf(initialUrl)
+              }
 
-                  if (webView.canGoBack()) {
+              var inputUrl by remember {
+                  mutableStateOf("")
+              }
 
-                      webView.goBack()
+              var isLoading by remember {
+                  mutableStateOf(false)
+              }
 
-                  } else {
+              var progress by remember {
+                  mutableStateOf(0f)
+              }
 
-                      super.onBackPressed()
+              var canGoBack by remember {
+                  mutableStateOf(false)
+              }
+
+              var canGoForward by remember {
+                  mutableStateOf(false)
+              }
+
+
+              fun updateNavigationState(view: WebView) {
+
+                  canGoBack = view.canGoBack()
+
+                  canGoForward = view.canGoForward()
+
+              }
+
+
+              fun loadAddress(value: String) {
+
+                  val text =
+                      value.trim()
+
+                  if (text.isEmpty()) {
+                      return
+                  }
+
+
+                  val url = when {
+
+                      text.startsWith("https://") ->
+                          text
+
+                      text.startsWith("http://") ->
+                          text
+
+                      text.contains(".") &&
+                          !text.contains(" ") ->
+                          "https://$text"
+
+                      else -> {
+
+                          val encoded =
+                              try {
+                                  URLEncoder.encode(
+                                      text,
+                                      "UTF-8"
+                                  )
+                              } catch (
+                                  _: Exception
+                              ) {
+                                  text
+                              }
+
+                          "https://www.google.com/search?q=$encoded"
+                      }
+                  }
+
+
+                  inputUrl = ""
+
+                  currentUrl = url
+
+                  webView?.loadUrl(url)
+
+                  keyboardController?.hide()
+              }
+
+
+              BackHandler(
+                  enabled = canGoBack
+              ) {
+
+                  webView?.let {
+
+                      if (it.canGoBack()) {
+
+                          it.goBack()
+
+                          updateNavigationState(it)
+                      }
                   }
               }
 
-              override fun onDestroy() {
 
-                  handler.removeCallbacks(
-                      refreshRunnable
-                  )
+              MaterialTheme {
 
-                  webView.destroy()
+                  Surface(
+                      modifier = Modifier.fillMaxSize(),
+                      color = Color(0xFF0F172A)
+                  ) {
 
-                  super.onDestroy()
+                      Column(
+                          modifier =
+                              Modifier.fillMaxSize()
+                      ) {
+
+
+                          // =================================================
+                          // Browser toolbar
+                          // =================================================
+
+                          Surface(
+                              modifier =
+                                  Modifier.fillMaxWidth(),
+
+                              color =
+                                  Color(0xFF1E293B),
+
+                              shadowElevation =
+                                  5.dp
+                          ) {
+
+                              Column {
+
+
+                                  Row(
+                                      modifier =
+                                          Modifier
+                                              .fillMaxWidth()
+                                              .padding(
+                                                  horizontal = 6.dp,
+                                                  vertical = 6.dp
+                                              ),
+
+                                      verticalAlignment =
+                                          Alignment.CenterVertically
+                                  ) {
+
+
+                                      // Back
+
+                                      IconButton(
+                                          enabled =
+                                              canGoBack,
+
+                                          onClick = {
+
+                                              webView?.let {
+
+                                                  if (
+                                                      it.canGoBack()
+                                                  ) {
+
+                                                      it.goBack()
+
+                                                      updateNavigationState(
+                                                          it
+                                                      )
+                                                  }
+                                              }
+                                          }
+                                      ) {
+
+                                          Icon(
+                                              imageVector =
+                                                  Icons.Default.ArrowBack,
+
+                                              contentDescription =
+                                                  "Back",
+
+                                              tint =
+                                                  if (
+                                                      canGoBack
+                                                  ) {
+                                                      Color.White
+                                                  } else {
+                                                      Color.Gray
+                                                  }
+                                          )
+                                      }
+
+
+                                      // Forward
+
+                                      IconButton(
+                                          enabled =
+                                              canGoForward,
+
+                                          onClick = {
+
+                                              webView?.let {
+
+                                                  if (
+                                                      it.canGoForward()
+                                                  ) {
+
+                                                      it.goForward()
+
+                                                      updateNavigationState(
+                                                          it
+                                                      )
+                                                  }
+                                              }
+                                          }
+                                      ) {
+
+                                          Icon(
+                                              imageVector =
+                                                  Icons.Default.ArrowForward,
+
+                                              contentDescription =
+                                                  "Forward",
+
+                                              tint =
+                                                  if (
+                                                      canGoForward
+                                                  ) {
+                                                      Color.White
+                                                  } else {
+                                                      Color.Gray
+                                                  }
+                                          )
+                                      }
+
+
+                                      // Address bar
+
+                                      Box(
+                                          modifier =
+                                              Modifier
+                                                  .weight(1f)
+                                                  .height(44.dp)
+                                                  .background(
+                                                      Color(0xFF334155),
+                                                      RoundedCornerShape(
+                                                          22.dp
+                                                      )
+                                                  )
+                                                  .padding(
+                                                      horizontal = 14.dp
+                                                  ),
+
+                                          contentAlignment =
+                                              Alignment.CenterStart
+                                      ) {
+
+                                          BasicTextField(
+
+                                              value =
+                                                  inputUrl,
+
+                                              onValueChange = {
+                                                  inputUrl = it
+                                              },
+
+                                              singleLine = true,
+
+                                              textStyle =
+                                                  TextStyle(
+                                                      color =
+                                                          Color.White,
+                                                      fontSize =
+                                                          14.sp
+                                                  ),
+
+                                              keyboardOptions =
+                                                  KeyboardOptions(
+                                                      imeAction =
+                                                          ImeAction.Go
+                                                  ),
+
+                                              keyboardActions =
+                                                  KeyboardActions(
+                                                      onGo = {
+                                                          loadAddress(
+                                                              inputUrl
+                                                          )
+                                                      }
+                                                  ),
+
+                                              modifier =
+                                                  Modifier.fillMaxWidth(),
+
+                                              decorationBox = {
+                                                  innerTextField ->
+
+                                                  if (
+                                                      inputUrl.isEmpty()
+                                                  ) {
+
+                                                      Row(
+                                                          verticalAlignment =
+                                                              Alignment.CenterVertically
+                                                      ) {
+
+                                                          Icon(
+                                                              imageVector =
+                                                                  Icons.Default.Search,
+
+                                                              contentDescription =
+                                                                  null,
+
+                                                              tint =
+                                                                  Color(
+                                                                      0xFF94A3B8
+                                                                  ),
+
+                                                              modifier =
+                                                                  Modifier.size(
+                                                                      18.dp
+                                                                  )
+                                                          )
+
+                                                          Spacer(
+                                                              modifier =
+                                                                  Modifier.width(
+                                                                      8.dp
+                                                                  )
+                                                          )
+
+                                                          Text(
+                                                              text =
+                                                                  "ابحث أو أدخل رابطاً...",
+
+                                                              color =
+                                                                  Color(
+                                                                      0xFF94A3B8
+                                                                  ),
+
+                                                              fontSize =
+                                                                  13.sp
+                                                          )
+                                                      }
+                                                  }
+
+                                                  innerTextField()
+                                              }
+                                          )
+                                      }
+
+
+                                      Spacer(
+                                          modifier =
+                                              Modifier.width(4.dp)
+                                      )
+
+
+                                      // Reload / Stop
+
+                                      IconButton(
+                                          onClick = {
+
+                                              webView?.let {
+
+                                                  if (isLoading) {
+                                                      it.stopLoading()
+                                                  } else {
+                                                      it.reload()
+                                                  }
+                                              }
+                                          }
+                                      ) {
+
+                                          Icon(
+                                              imageVector =
+                                                  if (
+                                                      isLoading
+                                                  ) {
+                                                      Icons.Default.Close
+                                                  } else {
+                                                      Icons.Default.Refresh
+                                                  },
+
+                                              contentDescription =
+                                                  "Reload",
+
+                                              tint =
+                                                  Color(
+                                                      0xFF38BDF8
+                                                  )
+                                          )
+                                      }
+
+                                  }
+
+
+                                  if (isLoading) {
+
+                                      LinearProgressIndicator(
+
+                                          progress = {
+                                              progress
+                                          },
+
+                                          modifier =
+                                              Modifier
+                                                  .fillMaxWidth()
+                                                  .height(2.dp),
+
+                                          color =
+                                              Color(
+                                                  0xFF38BDF8
+                                              ),
+
+                                          trackColor =
+                                              Color.Transparent
+                                      )
+                                  }
+                              }
+                          }
+
+
+                          // =================================================
+                          // WebView
+                          // =================================================
+
+                          AndroidView(
+
+                              modifier =
+                                  Modifier
+                                      .fillMaxWidth()
+                                      .weight(1f),
+
+                              factory = { ctx ->
+
+                                  WebView(ctx).apply {
+
+                                      webView = this
+
+
+                                      // -------------------------------------
+                                      // Normal WebView configuration
+                                      // -------------------------------------
+
+                                      settings.apply {
+
+                                          javaScriptEnabled =
+                                              true
+
+                                          domStorageEnabled =
+                                              true
+
+                                          databaseEnabled =
+                                              true
+
+                                          loadsImagesAutomatically =
+                                              true
+
+                                          javaScriptCanOpenWindowsAutomatically =
+                                              true
+
+                                          allowFileAccess =
+                                              false
+
+                                          allowContentAccess =
+                                              true
+
+                                          builtInZoomControls =
+                                              false
+
+                                          displayZoomControls =
+                                              false
+
+                                          supportZoom =
+                                              false
+
+                                          useWideViewPort =
+                                              true
+
+                                          loadWithOverviewMode =
+                                              false
+
+                                          cacheMode =
+                                              WebSettings.LOAD_DEFAULT
+
+                                          mediaPlaybackRequiresUserGesture =
+                                              true
+
+                                          mixedContentMode =
+                                              WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                      }
+
+
+                                      /*
+                                       * مهم:
+                                       *
+                                       * لا نقوم بتغيير User-Agent
+                                       * ولا Client Hints.
+                                       *
+                                       * يترك WebView هويته الطبيعية.
+                                       */
+
+
+                                      val cookies =
+                                          CookieManager.getInstance()
+
+                                      cookies.setAcceptCookie(
+                                          true
+                                      )
+
+                                      cookies.setAcceptThirdPartyCookies(
+                                          this,
+                                          true
+                                      )
+
+
+                                      webViewClient =
+                                          object : WebViewClient() {
+
+                                              override fun
+                                              shouldOverrideUrlLoading(
+                                                  view: WebView?,
+                                                  request: WebResourceRequest?
+                                              ): Boolean {
+
+                                                  /*
+                                                   * السماح لـ WebView
+                                                   * بالتعامل مع الروابط
+                                                   * بشكل طبيعي.
+                                                   */
+
+                                                  return false
+                                              }
+
+
+                                              override fun
+                                              onPageStarted(
+                                                  view: WebView?,
+                                                  url: String?,
+                                                  favicon: android.graphics.Bitmap?
+                                              ) {
+
+                                                  super.onPageStarted(
+                                                      view,
+                                                      url,
+                                                      favicon
+                                                  )
+
+                                                  isLoading = true
+
+                                                  progress = 0f
+
+                                                  url?.let {
+
+                                                      currentUrl =
+                                                          it
+                                                  }
+                                              }
+
+
+                                              override fun
+                                              onPageFinished(
+                                                  view: WebView?,
+                                                  url: String?
+                                              ) {
+
+                                                  super.onPageFinished(
+                                                      view,
+                                                      url
+                                                  )
+
+                                                  isLoading =
+                                                      false
+
+                                                  progress =
+                                                      1f
+
+                                                  view?.let {
+
+                                                      updateNavigationState(
+                                                          it
+                                                      )
+                                                  }
+
+                                                  CookieManager
+                                                      .getInstance()
+                                                      .flush()
+                                              }
+                                          }
+
+
+                                      webChromeClient =
+                                          object :
+                                              WebChromeClient() {
+
+                                              override fun
+                                              onProgressChanged(
+                                                  view: WebView?,
+                                                  newProgress: Int
+                                              ) {
+
+                                                  progress =
+                                                      newProgress
+                                                          .coerceIn(
+                                                              0,
+                                                              100
+                                                          )
+                                                          .toFloat() /
+                                                          100f
+
+                                                  isLoading =
+                                                      newProgress < 100
+                                              }
+                                          }
+
+
+                                      setDownloadListener {
+                                          _,
+                                          _,
+                                          _,
+                                          _,
+                                          _ ->
+                                          Toast.makeText(
+                                              context,
+                                              "تم طلب تنزيل الملف",
+                                              Toast.LENGTH_SHORT
+                                          ).show()
+                                      }
+
+
+                                      loadUrl(
+                                          initialUrl
+                                      )
+                                  }
+                              }
+                          )
+
+
+                          // =================================================
+                          // Bottom control
+                          // =================================================
+
+                          Surface(
+
+                              modifier =
+                                  Modifier.fillMaxWidth(),
+
+                              color =
+                                  Color(0xFF1E293B)
+                          ) {
+
+                              Row(
+
+                                  modifier =
+                                      Modifier
+                                          .fillMaxWidth()
+                                          .padding(
+                                              horizontal = 12.dp,
+                                              vertical = 8.dp
+                                          ),
+
+                                  horizontalArrangement =
+                                      Arrangement.Center,
+
+                                  verticalAlignment =
+                                      Alignment.CenterVertically
+                              ) {
+
+                                  Button(
+
+                                      onClick = {
+
+                                          webView?.let {
+
+                                              it.clearCache(
+                                                  true
+                                              )
+
+                                              it.clearHistory()
+
+                                              CookieManager
+                                                  .getInstance()
+                                                  .removeAllCookies {
+                                                      CookieManager
+                                                          .getInstance()
+                                                          .flush()
+
+                                                      it.loadUrl(
+                                                          currentUrl
+                                                      )
+                                                  }
+                                          }
+
+                                          Toast.makeText(
+                                              context,
+                                              "تم تنظيف بيانات الموقع المحلية.",
+                                              Toast.LENGTH_SHORT
+                                          ).show()
+                                      },
+
+                                      colors =
+                                          ButtonDefaults.buttonColors(
+                                              containerColor =
+                                                  Color(
+                                                      0xFF334155
+                                                  )
+                                          ),
+
+                                      shape =
+                                          RoundedCornerShape(
+                                              12.dp
+                                          )
+                                  ) {
+
+                                      Icon(
+                                          imageVector =
+                                              Icons.Default.CleaningServices,
+
+                                          contentDescription =
+                                              null,
+
+                                          tint =
+                                              Color(
+                                                  0xFF38BDF8
+                                              )
+                                      )
+
+                                      Spacer(
+                                          modifier =
+                                              Modifier.width(
+                                                  8.dp
+                                              )
+                                      )
+
+                                      Text(
+                                          text =
+                                              "تنظيف بيانات الموقع"
+                                      )
+                                  }
+                              }
+                          }
+                      }
+                  }
               }
           }
           EOF
 
-      - name: Download Gradle
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
-          unzip -q gradle-8.11.1-bin.zip
-          echo "$PWD/gradle-8.11.1/bin" >> $GITHUB_PATH
 
-      - name: Build APK
-        run: |
-          gradle --no-daemon :app:assembleDebug
+      # ============================================================
+      # 16. Verify generated files
+      # ============================================================
 
-      - name: Upload APK
+      - name: Verify project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "Project files"
+          echo "========================================"
+
+          find . -maxdepth 5 -type f \
+            \( -name "*.gradle.kts" \
+            -o -name "*.xml" \
+            -o -name "*.kt" \
+            -o -name "*.properties" \) \
+            | sort
+
+          echo ""
+          echo "========================================"
+          echo "Java version"
+          echo "========================================"
+
+          java -version
+
+
+      # ============================================================
+      # 17. Setup Gradle
+      # ============================================================
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+
+      # ============================================================
+      # 18. Generate Gradle Wrapper
+      # ============================================================
+
+      - name: Generate Gradle Wrapper
+        shell: bash
+        run: |
+          set -e
+
+          gradle wrapper \
+            --gradle-version 8.6 \
+            --distribution-type bin
+
+          chmod +x gradlew
+
+
+      # ============================================================
+      # 19. Check Gradle
+      # ============================================================
+
+      - name: Check Gradle
+        shell: bash
+        run: |
+          ./gradlew --version
+
+
+      # ============================================================
+      # 20. Debug build
+      # ============================================================
+
+      - name: Test Debug Build
+        shell: bash
+        run: |
+          ./gradlew assembleDebug \
+            --stacktrace \
+            --no-daemon
+
+
+      # ============================================================
+      # 21. Create release keystore
+      #
+      # If GitHub Secrets are configured, use them.
+      #
+      # Required secrets for permanent Play Store signing:
+      #
+      # KEYSTORE_BASE64
+      # KEYSTORE_PASSWORD
+      # KEY_ALIAS
+      # KEY_PASSWORD
+      #
+      # If they are not configured, a temporary keystore is generated
+      # so the build can still complete.
+      # ============================================================
+
+      - name: Prepare release signing
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+
+          set -e
+
+          mkdir -p signing
+
+
+          if [ -n "$KEYSTORE_BASE64" ] && \
+             [ -n "$KEYSTORE_PASSWORD" ] && \
+             [ -n "$KEY_ALIAS" ] && \
+             [ -n "$KEY_PASSWORD" ]; then
+
+              echo "Using GitHub Actions release keystore."
+
+              echo "$KEYSTORE_BASE64" | base64 --decode \
+                  > signing/release.jks
+
+              echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/release.jks" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEY_ALIAS=$KEY_ALIAS" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEY_PASSWORD=$KEY_PASSWORD" \
+                  >> "$GITHUB_ENV"
+
+          else
+
+              echo "GitHub signing secrets were not found."
+              echo "Generating temporary release keystore."
+
+              keytool \
+                -genkeypair \
+                -v \
+                -keystore signing/release.jks \
+                -storepass "temporary-password" \
+                -alias "apexbrowser" \
+                -keypass "temporary-password" \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=ApexBrowser, OU=Android, O=ApexBrowser, L=Algiers, ST=Algiers, C=DZ"
+
+              echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/release.jks" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEYSTORE_PASSWORD=temporary-password" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEY_ALIAS=apexbrowser" \
+                  >> "$GITHUB_ENV"
+
+              echo "KEY_PASSWORD=temporary-password" \
+                  >> "$GITHUB_ENV"
+
+          fi
+
+
+      # ============================================================
+      # 22. Configure release signing
+      # ============================================================
+
+      - name: Configure release signing
+        shell: bash
+        run: |
+
+          set -e
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("app/build.gradle.kts")
+
+          text = path.read_text()
+
+          signing_block = r'''
+              signingConfigs {
+                  create("release") {
+                      storeFile = file(
+                          System.getenv("KEYSTORE_PATH")
+                      )
+
+                      storePassword =
+                          System.getenv("KEYSTORE_PASSWORD")
+
+                      keyAlias =
+                          System.getenv("KEY_ALIAS")
+
+                      keyPassword =
+                          System.getenv("KEY_PASSWORD")
+                  }
+              }
+          '''
+
+          text = text.replace(
+              'buildTypes {',
+              signing_block + '\n    buildTypes {',
+              1
+          )
+
+          text = text.replace(
+              '''release {
+                      isMinifyEnabled = false''',
+              '''release {
+                      signingConfig = signingConfigs.getByName("release")
+                      isMinifyEnabled = false''',
+              1
+          )
+
+          path.write_text(text)
+          PY
+
+
+      # ============================================================
+      # 23. Build signed APK + AAB
+      # ============================================================
+
+      - name: Build Signed Release APK and AAB
+        shell: bash
+        run: |
+
+          set -e
+
+          ./gradlew \
+            clean \
+            assembleRelease \
+            bundleRelease \
+            --stacktrace \
+            --no-daemon
+
+
+      # ============================================================
+      # 24. List outputs
+      # ============================================================
+
+      - name: Show build outputs
+        shell: bash
+        run: |
+
+          echo "========================================"
+          echo "APK"
+          echo "========================================"
+
+          find app/build/outputs/apk/release \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          echo ""
+          echo "========================================"
+          echo "AAB"
+          echo "========================================"
+
+          find app/build/outputs/bundle/release \
+            -type f \
+            -name "*.aab" \
+            -print
+
+
+      # ============================================================
+      # 25. Upload APK
+      # ============================================================
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: BLS-Smart-Browser-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: ApexBrowser-Release-APK
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+
+      # ============================================================
+      # 26. Upload AAB
+      # ============================================================
+
+      - name: Upload Play Store AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBrowser-PlayStore-AAB
+          path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+
+      # ============================================================
+      # 27. Upload mapping if generated
+      # ============================================================
+
+      - name: Upload mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBrowser-Mapping
+          path: app/build/outputs/mapping/release/**
+          if-no-files-found: ignore
+          retention-days: 30
